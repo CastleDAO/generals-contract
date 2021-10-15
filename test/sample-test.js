@@ -151,4 +151,31 @@ describe("MyContract", function () {
     expect( myContract.levelUp(1)).to.be.revertedWith('Not enough experience')
   });
 
+  it('Can change name', async function () {
+
+    
+    const general = await myContract.generals(1);
+    const exp = await myContract.experience(1);
+
+    const price = await myContract.changeNamePrice();
+
+    const result = await myContract.changeName(1, 'Mariano', {
+      value: price
+    });
+    expect(result).to.emit(myContract, "NameChanged");
+    const receipt = await result.wait();
+
+    const nameChangeEvent = receipt.events.find( i => i.event === 'NameChanged');
+
+    expect(nameChangeEvent.args[0]).to.equal(1);
+    expect(nameChangeEvent.args[1]).to.equal('Mariano');
+
+    const genNew = await myContract.generals(1);
+    const expNew = await myContract.experience(1);
+
+    expect(genNew.name).to.be.eq('Mariano');
+    expect(expNew.toNumber()).to.be.eq(exp.toNumber() + 250);
+
+  });
+
 });
