@@ -2,15 +2,30 @@
 
 pragma solidity ^0.8.4;
 
+import "@openzeppelin/contracts/token/ERC721/ERC721Burnable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
+interface IConnector {
+    function ownerOf(uint256 tokenId) external view returns (address owner);
+}
 
-contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
+// TODO check what ERC721Burnable does
+
+contract MyContract is
+    ERC721Enumerable,
+    ReentrancyGuard,
+    Ownable,
+    ERC721Burnable
+{
     using Counters for Counters.Counter;
     Counters.Counter _tokenIds;
+
+    // Castles contract
+    address public castlesAddress = 0x71f5C328241fC3e03A8c79eDCD510037802D369c;
+    IConnector public castlesContract = IConnector(castlesAddress);
 
     struct general {
         string name;
@@ -23,23 +38,32 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         uint256 constitution;
         uint256 speed;
         uint256 charisma;
-        // TODO: look at rarity manifested 
+        // TODO: look at rarity manifested
         uint256 level;
         uint256 createdAt;
         bool partner;
     }
 
-    uint256 public priceChangeName = 10000000000000000; // 0.01 ETH
+    // Global constants
+    uint256 public changeNamePrice = 10000000000000000; // 0.01 ETH
     uint256 public price = 50000000000000000; //0.05 ETH
+    uint256 public castleOwnerPrice = 0; // 0 ETH
     bool public paused = false; // Enable disable
     uint256 public maxTokens = 10000;
+    uint256 public xpPerQuest = 100;
+    uint256 public xpPerNameChange = 250;
+    uint256 public maxLevelGenerals = 10;
+    uint constant DAY = 1 days;
 
+    // Mappings
     mapping(uint256 => general) public generals;
     mapping(uint256 => uint256) public experience;
+    mapping(uint => uint) public generalsQuestLog;
+    mapping(uint256 => bool) public claimedWithCastle;
 
-
+    // Events
     event GeneralCreated(
-        string name, 
+        string name,
         uint256 defense,
         uint256 strength,
         uint256 intelligence,
@@ -48,97 +72,49 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         uint256 magicResistance,
         uint256 constitution,
         uint256 speed,
-        uint256 charisma);
+        uint256 charisma
+    );
 
-    event LevelUp(address indexed leveler, uint generalId, uint32 strength, uint32 dexterity, uint32 constitution, uint32 intelligence, uint32 wisdom, uint32 charisma);
-    
-    event NameChanged(uint generalId, string name);
+    event LeveledUp(
+        address indexed leveler,
+        uint256 generalId,
+        uint256 level
+    );
+
+    event ExperienceSpent(uint256 generalId, uint256 xpSpent, uint256 xpRemaining);
+    event NameChanged(uint256 generalId, string name);
+    event Quest(uint256 generalId, uint256 xpGained, uint256 xpTotal);
 
     constructor() ERC721("CryptoGenerals", "CRYPTOGENERALS") Ownable() {}
 
-
-    function spendExperience(uint256 _tokenId, uint256 _experience) external {
-        require(_experience <= experience[_tokenId], "Not enough experience");
-        require(_isApprovedOrOwner(msg.sender, _tokenId));
-
-        experience[_tokenId] -= _experience;
-
-        emit ExperienceSpent(_tokenId, _experience, experience[_tokenId]);
-    }
-
-    function changeName(uint256 _tokenId, string memory _name) external payable nonReentrant {
-        require(msg.value >= priceChangeName, "Eth sent is not enough");
-        require(_tokenId > 5 && _tokenId <= supply, "_tokenId invalid");
-        require(!_exists(_tokenId), "_tokenId invalid");
-
-        generals[_tokenId].name = _name;
-        // Increase experience
-        experience[_tokenId] += 100;
-        emit NameChanged(_tokenId, _name);
-    }
-
-    // Create general
-  function _createGeneral(
-    uint256 _tokenId,
-    string memory _name
-  ) internal {
-     
-    generals[_tokenId].name = _name;
-    generals[_tokenId].defense = _randomFromString("defense", 10);
-    generals[_tokenId].strength = _randomFromString("strength", 10);
-    generals[_tokenId].intelligence = _randomFromString("intelligence", 10);
-    generals[_tokenId].agility = _randomFromString("agility", 10);
-    generals[_tokenId].abilityPower = _randomFromString("abilityPower", 10);
-    generals[_tokenId].magicResitance = _randomFromString("magicResitance", 10);
-    generals[_tokenId].constitution = _randomFromString("constitution", 10);
-    generals[_tokenId].speed = _randomFromString("speed", 10);
-    generals[_tokenId].charisma = _randomFromString("charisma", 10);
-    
-    generals[_tokenId].level = 0;
-    generals[_tokenId].createdAt = block.timestamp;
-
-    experience[_tokenId].experience = 0;
-
-
-
-    emit GeneralCreated(
-        generals[_tokenId].name,
-        generals[_tokenId].defense,
-        generals[_tokenId].strength,
-        generals[_tokenId].intelligence,
-        generals[_tokenId].agility,
-        generals[_tokenId].abilityPower,
-        generals[_tokenId].magicResitance,
-        generals[_tokenId].constitution,
-        generals[_tokenId].speed,
-        generals[_tokenId].charisma
-    );
-  }
-
-
-   function _increase_base(uint _tokenId) internal {
-        require(_isApprovedOrOwner(msg.sender, _tokenId));
-        require(character_created[_tokenId]);
-        uint _points_spent = level_points_spent[_tokenId];
-        require(abilities_by_level(rm.level(_tokenId)) - _points_spent > 0);
-        level_points_spent[_tokenId] = _points_spent+1;
-    }
-
-    function increase_strength(uint _tokenId) external {
-        _increase_base(_tokenId);
-        ability_score storage _attr = ability_scores[_tokenId];
-        _attr.strength = _attr.strength+1;
-        emit Leveled(msg.sender, _tokenId, _attr.strength, _attr.dexterity, _attr.constitution, _attr.intelligence, _attr.wisdom, _attr.charisma);
-    }
+    // Change constants
 
     // Pause or resume minting
     function flipPause() public onlyOwner {
         paused = !paused;
     }
 
+    function setMaxLevels(uint256 _newMaxLevels) public onlyOwner {
+        maxLevelGenerals = _newMaxLevels;
+    }
+
+    function setXPPerQuest(uint256 _newXPPerQuest) public onlyOwner {
+        xpPerQuest = _newXPPerQuest;
+    }
+
+    function setXPPerNameChange(uint256 _newXpPerNameChange) public onlyOwner {
+        xpPerNameChange = _newXpPerNameChange;
+    }
+
     // Change the public price of the token
-    function setPublicPrice(uint256 newPrice) public onlyOwner {
-        price = newPrice;
+    function setPrice(uint256 _newPrice, uint256 _type) external onlyOwner {
+        if (_type == 0) {
+            price = _newPrice;
+        } else if (_type == 1) {
+            partnerPrice = _newPrice;
+        } else {
+            changeNamePrice = _newPrice;
+        }
     }
 
     // Change the maximum amount of tokens
@@ -151,8 +127,167 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         payable(owner()).transfer(address(this).balance);
     }
 
+    // Normal mint
+    function mint(string memory _name) public payable nonReentrant {
+        require(!paused, "Minting is paused");
+        require(price <= msg.value, "Ether value sent is not correct");
+        _internalMint(_name);
+    }
 
-    string[] private types = [       
+    // Mint without name
+    function mint() public payable nonReentrant {
+        require(!paused, "Minting is paused");
+        require(price <= msg.value, "Ether value sent is not correct");
+        _internalMint("Crypto General");
+    }
+
+    // Mint with castle
+    function mintWithCastle(uint256 _castleId, string memory _name)
+        external
+        payable
+        nonReentrant
+    {
+        require(!paused, "Minting is paused");
+        require(
+            castlesContract.ownerOf(_castleId) == msg.sender,
+            "Not the owner of this castle"
+        );
+        require(msg.value >= castleOwnerPrice, "Eth sent is not enough");
+        require(!claimedWithCastle[_castleId], "Castle already used for claiming a general");
+
+        _internalMint(_name);
+
+        // Update the list of claimed
+        claimedWithCastle[_castleId] = true;
+    }
+
+    // Allow the owner to claim a nft
+    function ownerClaim() public nonReentrant onlyOwner {
+        _internalMint("Crypto General");
+    }
+
+    // Called by every function after safe access checks
+    function _internalMint(string memory _name) internal {
+        require(_name.length < 100 && _name.length > 3, "Name between 3 and 100 characters");
+
+        // minting logic
+        uint256 current = _tokenIds.current();
+        require(current <= maxTokens, "Max token reached");
+
+        _tokenIds.increment();
+        uint256 tokenId = _tokenIds.current();
+
+        _createGeneral(tokenId, _name);
+        _safeMint(_msgSender(), tokenId);
+    }
+
+    // Create general
+    function _createGeneral(uint256 _tokenId, string memory _name) internal {
+        generals[_tokenId].name = _name;
+        generals[_tokenId].defense = _randomFromString("defense", 10);
+        generals[_tokenId].strength = _randomFromString("strength", 10);
+        generals[_tokenId].intelligence = _randomFromString("intelligence", 10);
+        generals[_tokenId].agility = _randomFromString("agility", 10);
+        generals[_tokenId].abilityPower = _randomFromString("abilityPower", 10);
+        generals[_tokenId].magicResitance = _randomFromString(
+            "magicResitance",
+            10
+        );
+        generals[_tokenId].constitution = _randomFromString("constitution", 10);
+        generals[_tokenId].speed = _randomFromString("speed", 10);
+        generals[_tokenId].charisma = _randomFromString("charisma", 10);
+
+        generals[_tokenId].level = 1;
+        generals[_tokenId].createdAt = block.timestamp;
+
+        experience[_tokenId].experience = 0;
+
+        emit GeneralCreated(
+            generals[_tokenId].name,
+            generals[_tokenId].defense,
+            generals[_tokenId].strength,
+            generals[_tokenId].intelligence,
+            generals[_tokenId].agility,
+            generals[_tokenId].abilityPower,
+            generals[_tokenId].magicResitance,
+            generals[_tokenId].constitution,
+            generals[_tokenId].speed,
+            generals[_tokenId].charisma
+        );
+    }
+
+    // General modifiers
+    function spendExperience(uint256 _tokenId, uint256 _experience) external {
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(_experience <= experience[_tokenId], "Not enough experience");
+
+        experience[_tokenId] -= _experience;
+
+        emit ExperienceSpent(_tokenId, _experience, experience[_tokenId]);
+    }
+
+    function quest(uint _tokenId) external {
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(block.timestamp > generalsQuestLog[_tokenId]);
+
+        uint256 xpGained = _random(generals[_tokenId].name, xpPerQuest) + xpPerQuest;
+
+        generalsQuestLog[_tokenId] = block.timestamp + DAY;
+        experience[_tokenId] += xpGained;
+        emit Quest(_tokenId, xpGained, experience[_tokenId]);
+    }
+
+     function levelUp(uint _tokenId) external {
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        uint _level = generals[_tokenId].level;
+        require(_level <= maxLevelGenerals, "Max level reached");
+        uint _xpRequired = experienceRequired(_level, 100);
+        spendExperience(_tokenId, _xpRequired);
+        
+        generals[_tokenId].level += 1;
+        generals[_tokenId].defense += 1;
+        generals[_tokenId].strength += 1;
+        generals[_tokenId].intelligence += 1;
+        generals[_tokenId].agility += 1;
+        generals[_tokenId].abilityPower += 1;
+        generals[_tokenId].magicResitance += 1;
+        generals[_tokenId].constitution += 1;
+        generals[_tokenId].speed += 1;
+        generals[_tokenId].charisma += 1;
+
+        emit LeveledUp(msg.sender, _tokenId, _level + 1);
+    }
+
+    // Increase the difficulty of leveling up
+    // 100, 220, 360, 520, 700, 900
+    function experienceRequired(uint256 _level, uint256 _xpPerLevel)
+        public
+        pure
+        returns (uint256 xp_to_next_level)
+    {
+        xp_to_next_level = _level * _xpPerLevel;
+        for (uint256 i = 1; i < _level; i++) {
+            xp_to_next_level += _level * (_xpPerLevel / 10);
+        }
+    }
+
+    // Change the name of a general
+    function changeName(uint256 _tokenId, string memory _name)
+        external
+        payable
+        nonReentrant
+    {
+        require(msg.value >= changeNamePrice, "Eth sent is not enough");
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(_name.length < 100 && _name.length > 3, "Name between 3 and 100 characters");
+        generals[_tokenId].name = _name;
+        // Increase experience
+        experience[_tokenId] += xpPerNameChange;
+        emit NameChanged(_tokenId, _name);
+    }
+
+
+    string[] private types = [
         "god",
         "demon",
         "chosenOne",
@@ -161,315 +296,56 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         "savage",
         "ai"
     ];
-    
-    function random(string memory input) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(input)));
+
+    function _random(uint256 _salt, uint256 _limit)
+        internal
+        view
+        returns (uint256)
+    {
+        return
+            uint256(
+                keccak256(
+                    abi.encodePacked(block.number, block.timestamp, _salt)
+                )
+            ) % _limit;
     }
 
-     function _random(uint256 _salt, uint256 _limit) internal view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(block.number, block.timestamp, _salt))) % _limit;
+    function _randomFromString(string memory _salt, uint256 _limit)
+        internal
+        view
+        returns (uint256)
+    {
+        return
+            uint256(
+                keccak256(
+                    abi.encodePacked(block.number, block.timestamp, _salt)
+                )
+            ) % _limit;
     }
 
-    function _randomFromString(string memory _salt, uint256 _limit) internal view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(block.number, block.timestamp, _salt))) % _limit;
-    }
-
-    function strConcat(string memory _a, string memory _b) internal pure returns (string memory) {
-        return string(abi.encodePacked(bytes(_a), bytes(_b)));
-    }
-   
-    function compareStrings(string memory a, string memory b) internal pure returns (bool) {
-        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
-    }
 
     // Returns a random item from the list, always the same for the same token ID
-    function pluck(uint256 tokenId, string memory keyPrefix, string[] memory sourceArray) internal view returns (string memory) {
-        uint256 rand = random(string(abi.encodePacked(keyPrefix, toString(tokenId))));
+    function pluck(
+        uint256 tokenId,
+        string memory keyPrefix,
+        string[] memory sourceArray
+    ) internal view returns (string memory) {
+        uint256 rand = _random(
+            string(abi.encodePacked(keyPrefix, toString(tokenId))), sourceArray.length
+        );
 
-        return sourceArray[rand % sourceArray.length];
+        return sourceArray[rand];
     }
 
-
-    
-    function getType(uint256 tokenId) public view returns (string memory) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        return pluck(tokenId, "TYPE", types);
-    }
-
-    function getIsSpecial(uint256 tokenId) public view returns (bool) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 rand = random(string(abi.encodePacked("IS_SPECIAL", toString(tokenId))));
-        return (rand % 99) < 10;
-    }
-
-    function getDefense(uint256 tokenId) public view returns (uint256) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 rand = random(string(abi.encodePacked("DEFENSE", toString(tokenId))));
-        uint256 max = 50;
-        uint256 min = 10;
-
-        string memory cType = getType(tokenId);
-
-        if (compareStrings(cType, "god")) {
-            min = 20;
-            max = 50;
-        } else if (compareStrings(cType, "demon")) {
-            min = 15;
-            max = 40;
-        } else if (compareStrings(cType, "ai")) {
-            min = 20;
-            max = 80;
-        } else if (compareStrings(cType, "chosenOne")) {
-            min = 25;
-            max = 60;
-        } else if (compareStrings(cType, "reincarnate")) {
-            min = 20;
-            max = 60;
-        } else if (compareStrings(cType, "wizard")) {
-            min = 50;
-            max = 80;
-        } else if (compareStrings(cType, "savage")) {
-            min = 30;
-            max = 80;
-        }
-        
-        if (getIsSpecial(tokenId)) {
-            min += 30;
-            max += 20;
-        }
-
-        uint256 diff = max - min;
-
-        return (rand % diff) + min;
-    }
-
-    function getAttack(uint256 tokenId) public view returns (uint256) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 rand = random(string(abi.encodePacked("ATTACK", toString(tokenId))));
-        uint256 max = 50;
-        uint256 min = 10;
-
-        string memory cType = getType(tokenId);
-
-        if (compareStrings(cType, "god")) {
-            min = 20;
-            max = 50;
-        } else if (compareStrings(cType, "demon")) {
-            min = 40;
-            max = 80;
-        } else if (compareStrings(cType, "ai")) {
-            min = 50;
-            max = 80;
-        } else if (compareStrings(cType, "chosenOne")) {
-            min = 30;
-            max = 60;
-        } else if (compareStrings(cType, "reincarnate")) {
-            min = 20;
-            max = 60;
-        } else if (compareStrings(cType, "wizard")) {
-            min = 20;
-            max = 50;
-        } else if (compareStrings(cType, "savage")) {
-            min = 50;
-            max = 90;
-        }
-        
-        if (getIsSpecial(tokenId)) {
-            min += 30;
-            max += 20;
-        }
-
-        uint256 diff = max - min;
-
-        return (rand % diff) + min;
-    }
-
-    function getSoul(uint256 tokenId) public view returns (uint256) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 rand = random(string(abi.encodePacked("SOUL", toString(tokenId))));
-        uint256 max = 50;
-        uint256 min = 10;
-
-        string memory cType = getType(tokenId);
-
-        if (compareStrings(cType, "god")) {
-            min = 50;
-            max = 100;
-        } else if (compareStrings(cType, "demon")) {
-            min = 30;
-            max = 75;
-        } else if (compareStrings(cType, "ai")) {
-            min = 10;
-            max = 40;
-        } else if (compareStrings(cType, "chosenOne")) {
-            min = 30;
-            max = 50;
-        } else if (compareStrings(cType, "reincarnate")) {
-            min = 30;
-            max = 70;
-        } else if (compareStrings(cType, "wizard")) {
-            min = 50;
-            max = 70;
-        } else if (compareStrings(cType, "savage")) {
-            min = 20;
-            max = 40;
-        }
-        
-        if (getIsSpecial(tokenId)) {
-            min += 30;
-            max += 20;
-        }
-
-        uint256 diff = max - min;
-
-        return (rand % diff) + min;
-    }
-
-    function getWisdom(uint256 tokenId) public view returns (uint256) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 rand = random(string(abi.encodePacked("WISDOM", toString(tokenId))));
-        uint256 max = 50;
-        uint256 min = 10;
-
-        string memory cType = getType(tokenId);
-
-        if (compareStrings(cType, "god")) {
-            min = 50;
-            max = 100;
-        } else if (compareStrings(cType, "demon")) {
-            min = 20;
-            max = 70;
-        } else if (compareStrings(cType, "ai")) {
-            min = 20;
-            max = 70;
-        } else if (compareStrings(cType, "chosenOne")) {
-            min = 20;
-            max = 60;
-        } else if (compareStrings(cType, "reincarnate")) {
-            min = 60;
-            max = 90;
-        } else if (compareStrings(cType, "wizard")) {
-            min = 60;
-            max = 90;
-        } else if (compareStrings(cType, "savage")) {
-            min = 10;
-            max = 30;
-        }
-        
-        if (getIsSpecial(tokenId)) {
-            min += 30;
-            max += 20;
-        }
-
-        uint256 diff = max - min;
-
-        return (rand % diff) + min;
-    }
-
-    function getRarityNumber(uint256 tokenId) public view returns (uint256) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        uint256 defense = getDefense(tokenId);
-        uint256 attack = getAttack(tokenId);
-        uint256 wisdom = getWisdom(tokenId);
-        uint256 soul = getSoul(tokenId);
-
-        bool special = getIsSpecial(tokenId);
-
-        uint256 rarity = 0;
-
-        if (special) {
-            rarity += 1;
-        }
-
-        if (defense > 50) {
-            rarity += 1;
-            if (defense > 70) {
-                rarity += 1;
-                if(defense > 90 ) {
-                    rarity += 1;
-                }
-            }
-        }
-
-        if (wisdom > 50) {
-            rarity += 1;
-            if (wisdom > 70) {
-                rarity += 1;
-                if(wisdom > 90 ) {
-                    rarity += 1;
-                }
-            }
-        }
-
-        if (soul > 50) {
-            rarity += 1;
-            if (soul > 70) {
-                rarity += 1;
-                if(soul > 90 ) {
-                    rarity += 1;
-                }
-            }
-        }
-
-        if (attack > 50) {
-            rarity += 1;
-            if (attack > 70) {
-                rarity += 1;
-                if(attack > 90 ) {
-                    rarity += 1;
-                }
-            }
-        }
-
-
-        return rarity;
-    }
-
-
-    string[] private traitCategories = [
-        "type",
-        "defense",
-        "wisdom",
-        "soul",
-        "attack",
-        "rarityNumber",
-        "special"
-    ];
-    
-    function traitsOf(uint256 tokenId) public view returns (string memory) {
-        require(_exists(tokenId), "ERC721Metadata: Non minted NFT");
-        string[7] memory traitValues = [
-            getType(tokenId),
-            toString(getDefense(tokenId)),
-            toString(getWisdom(tokenId)),
-            toString(getSoul(tokenId)),
-            toString(getAttack(tokenId)),
-            toString(getRarityNumber(tokenId)),
-            getIsSpecial(tokenId) ? 'true': 'false'
-        ];
-
-        string memory resultString = "[";
-        for (uint8 j = 0; j < traitCategories.length; j++) {
-        if (j > 0) {
-            resultString = strConcat(resultString, ", ");
-        }
-        resultString = strConcat(resultString, '{"trait_type": "');
-        resultString = strConcat(resultString, traitCategories[j]);
-        resultString = strConcat(resultString, '", "value": "');
-        resultString = strConcat(resultString, traitValues[j]);
-        resultString = strConcat(resultString, '"}');
-        }
-        return strConcat(resultString, "]");
-    }
 
 
     /**
      * @dev Base URI for computing {tokenURI}. Empty by default, can be overriden
      * in child contracts.
      */
-    string private baseURI = "ipfs://asdad/asdas/";
+    string private baseURI = "ipfs://";
 
-    function _baseURI() override internal view virtual returns (string memory) {
+    function _baseURI() internal view virtual override returns (string memory) {
         return baseURI;
     }
 
@@ -477,34 +353,9 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         baseURI = newBaseURI;
     }
 
-    function mint() public payable nonReentrant {
-        require(!paused, "Minting is paused");
-        require(price <= msg.value, "Ether value sent is not correct");
-        // minting logic
-        uint256 current = _tokenIds.current();
-        require(current <= maxTokens, "Max token reached");
-
-        _tokenIds.increment();
-        uint256 tokenId = _tokenIds.current();
-
-        _safeMint(_msgSender(), tokenId);
-    }
-
-   
-    // Allow the owner to claim a nft 
-    function ownerClaim() public nonReentrant onlyOwner {
-        // minting logic
-        require(_tokenIds.current() <= maxTokens, "Max token reached");
-
-        _tokenIds.increment();
-        uint256 tokenId = _tokenIds.current();
-
-        _safeMint(_msgSender(), tokenId);
-    }
-
     function toString(uint256 value) internal pure returns (string memory) {
-    // Inspired by OraclizeAPI's implementation - MIT license
-    // https://github.com/oraclize/ethereum-api/blob/b42146b063c7d6ee1358846c198246239e9360e8/oraclizeAPI_0.4.25.sol
+        // Inspired by OraclizeAPI's implementation - MIT license
+        // https://github.com/oraclize/ethereum-api/blob/b42146b063c7d6ee1358846c198246239e9360e8/oraclizeAPI_0.4.25.sol
 
         if (value == 0) {
             return "0";
@@ -523,6 +374,4 @@ contract MyContract is ERC721Enumerable, ReentrancyGuard, Ownable {
         }
         return string(buffer);
     }
-
-   
 }
