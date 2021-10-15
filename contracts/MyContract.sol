@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721Burnable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -12,13 +11,10 @@ interface IConnector {
     function ownerOf(uint256 tokenId) external view returns (address owner);
 }
 
-// TODO check what ERC721Burnable does
-
 contract MyContract is
     ERC721Enumerable,
     ReentrancyGuard,
-    Ownable,
-    ERC721Burnable
+    Ownable
 {
     using Counters for Counters.Counter;
     Counters.Counter _tokenIds;
@@ -38,10 +34,8 @@ contract MyContract is
         uint256 constitution;
         uint256 speed;
         uint256 charisma;
-        // TODO: look at rarity manifested
         uint256 level;
         uint256 createdAt;
-        bool partner;
     }
 
     // Global constants
@@ -64,15 +58,8 @@ contract MyContract is
     // Events
     event GeneralCreated(
         string name,
-        uint256 defense,
-        uint256 strength,
-        uint256 intelligence,
-        uint256 agility,
-        uint256 abilityPower,
-        uint256 magicResistance,
-        uint256 constitution,
-        uint256 speed,
-        uint256 charisma
+        uint256 generalId,
+        general generalCreated
     );
 
     event LeveledUp(
@@ -111,7 +98,7 @@ contract MyContract is
         if (_type == 0) {
             price = _newPrice;
         } else if (_type == 1) {
-            partnerPrice = _newPrice;
+            castleOwnerPrice = _newPrice;
         } else {
             changeNamePrice = _newPrice;
         }
@@ -128,7 +115,7 @@ contract MyContract is
     }
 
     // Normal mint
-    function mint(string memory _name) public payable nonReentrant {
+    function mintWithName(string memory _name) public payable nonReentrant {
         require(!paused, "Minting is paused");
         require(price <= msg.value, "Ether value sent is not correct");
         _internalMint(_name);
@@ -168,7 +155,7 @@ contract MyContract is
 
     // Called by every function after safe access checks
     function _internalMint(string memory _name) internal {
-        require(_name.length < 100 && _name.length > 3, "Name between 3 and 100 characters");
+        require(bytes(_name).length < 100 && bytes(_name).length > 3, "Name between 3 and 100 characters");
 
         // minting logic
         uint256 current = _tokenIds.current();
@@ -184,40 +171,33 @@ contract MyContract is
     // Create general
     function _createGeneral(uint256 _tokenId, string memory _name) internal {
         generals[_tokenId].name = _name;
-        generals[_tokenId].defense = _randomFromString("defense", 10);
-        generals[_tokenId].strength = _randomFromString("strength", 10);
-        generals[_tokenId].intelligence = _randomFromString("intelligence", 10);
-        generals[_tokenId].agility = _randomFromString("agility", 10);
-        generals[_tokenId].abilityPower = _randomFromString("abilityPower", 10);
-        generals[_tokenId].magicResitance = _randomFromString(
-            "magicResitance",
+        generals[_tokenId].defense = _randomFromString("defense", 10) + 1;
+        generals[_tokenId].strength = _randomFromString("strength", 10)  + 1;
+        generals[_tokenId].intelligence = _randomFromString("intelligence", 10)  + 1;
+        generals[_tokenId].agility = _randomFromString("agility", 10)  + 1;
+        generals[_tokenId].abilityPower = _randomFromString("abilityPower", 10)  + 1;
+        generals[_tokenId].magicResistance = _randomFromString(
+            "magicResistance",
             10
-        );
-        generals[_tokenId].constitution = _randomFromString("constitution", 10);
-        generals[_tokenId].speed = _randomFromString("speed", 10);
-        generals[_tokenId].charisma = _randomFromString("charisma", 10);
+        )  + 1;
+        generals[_tokenId].constitution = _randomFromString("constitution", 10)  + 1;
+        generals[_tokenId].speed = _randomFromString("speed", 10)  + 1;
+        generals[_tokenId].charisma = _randomFromString("charisma", 10)  + 1;
 
         generals[_tokenId].level = 1;
         generals[_tokenId].createdAt = block.timestamp;
 
-        experience[_tokenId].experience = 0;
+        experience[_tokenId] = 0;
 
         emit GeneralCreated(
             generals[_tokenId].name,
-            generals[_tokenId].defense,
-            generals[_tokenId].strength,
-            generals[_tokenId].intelligence,
-            generals[_tokenId].agility,
-            generals[_tokenId].abilityPower,
-            generals[_tokenId].magicResitance,
-            generals[_tokenId].constitution,
-            generals[_tokenId].speed,
-            generals[_tokenId].charisma
+            _tokenId,
+            generals[_tokenId]
         );
     }
 
     // General modifiers
-    function spendExperience(uint256 _tokenId, uint256 _experience) external {
+    function spendExperience(uint256 _tokenId, uint256 _experience) public {
         require(_isApprovedOrOwner(msg.sender, _tokenId));
         require(_experience <= experience[_tokenId], "Not enough experience");
 
@@ -228,9 +208,9 @@ contract MyContract is
 
     function quest(uint _tokenId) external {
         require(_isApprovedOrOwner(msg.sender, _tokenId));
-        require(block.timestamp > generalsQuestLog[_tokenId]);
+        require(block.timestamp > generalsQuestLog[_tokenId], "Too early to do a new quest");
 
-        uint256 xpGained = _random(generals[_tokenId].name, xpPerQuest) + xpPerQuest;
+        uint256 xpGained = _random(_tokenId, xpPerQuest) + xpPerQuest;
 
         generalsQuestLog[_tokenId] = block.timestamp + DAY;
         experience[_tokenId] += xpGained;
@@ -250,7 +230,7 @@ contract MyContract is
         generals[_tokenId].intelligence += 1;
         generals[_tokenId].agility += 1;
         generals[_tokenId].abilityPower += 1;
-        generals[_tokenId].magicResitance += 1;
+        generals[_tokenId].magicResistance += 1;
         generals[_tokenId].constitution += 1;
         generals[_tokenId].speed += 1;
         generals[_tokenId].charisma += 1;
@@ -279,23 +259,12 @@ contract MyContract is
     {
         require(msg.value >= changeNamePrice, "Eth sent is not enough");
         require(_isApprovedOrOwner(msg.sender, _tokenId));
-        require(_name.length < 100 && _name.length > 3, "Name between 3 and 100 characters");
+        require(bytes(_name).length < 100 && bytes(_name).length > 3, "Name between 3 and 100 characters");
         generals[_tokenId].name = _name;
         // Increase experience
         experience[_tokenId] += xpPerNameChange;
         emit NameChanged(_tokenId, _name);
     }
-
-
-    string[] private types = [
-        "god",
-        "demon",
-        "chosenOne",
-        "reincarnate",
-        "wizard",
-        "savage",
-        "ai"
-    ];
 
     function _random(uint256 _salt, uint256 _limit)
         internal
@@ -324,20 +293,6 @@ contract MyContract is
     }
 
 
-    // Returns a random item from the list, always the same for the same token ID
-    function pluck(
-        uint256 tokenId,
-        string memory keyPrefix,
-        string[] memory sourceArray
-    ) internal view returns (string memory) {
-        uint256 rand = _random(
-            string(abi.encodePacked(keyPrefix, toString(tokenId))), sourceArray.length
-        );
-
-        return sourceArray[rand];
-    }
-
-
 
     /**
      * @dev Base URI for computing {tokenURI}. Empty by default, can be overriden
@@ -353,25 +308,4 @@ contract MyContract is
         baseURI = newBaseURI;
     }
 
-    function toString(uint256 value) internal pure returns (string memory) {
-        // Inspired by OraclizeAPI's implementation - MIT license
-        // https://github.com/oraclize/ethereum-api/blob/b42146b063c7d6ee1358846c198246239e9360e8/oraclizeAPI_0.4.25.sol
-
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
 }
