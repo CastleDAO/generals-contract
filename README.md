@@ -128,3 +128,9 @@ https://etherscan.io/address/0x521f9c7505005cfa19a8e5786a9c3c9c9f5e6f42#code
 - Partners https://arbiscan.io/address/0x4de95c1E202102E22E801590C51D7B979f167FBB#code
 
 https://nft.storage/#getting-started
+
+
+## Ropsten test
+
+- Castles contract https://ropsten.etherscan.io/address/0xf22E6c12372b1bE8ba63EfFacAf1C8688e4A222A#code
+- npx hardhat verify --network ropsten
