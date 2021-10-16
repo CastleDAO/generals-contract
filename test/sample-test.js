@@ -1,12 +1,12 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("MyContract", function () {
+describe("CryptoGenerals", function () {
   let myContract;
 
   this.beforeAll(async () => {
-    const MyContract = await ethers.getContractFactory("MyContract");
-    myContract = await MyContract.deploy();
+    const CryptoGenerals = await ethers.getContractFactory("CryptoGenerals");
+    myContract = await CryptoGenerals.deploy();
     await myContract.deployed();
   });
 

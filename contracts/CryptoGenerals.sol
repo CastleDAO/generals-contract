@@ -6,21 +6,28 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
 
 interface IConnector {
     function ownerOf(uint256 tokenId) external view returns (address owner);
 }
 
-contract MyContract is
+contract CryptoGenerals is
     ERC721Enumerable,
     ReentrancyGuard,
-    Ownable
+    Ownable,
+    AccessControl 
 {
     using Counters for Counters.Counter;
     Counters.Counter _tokenIds;
 
+    // Create a new role identifier for the minter role
+    bytes32 public constant GAME_ROLE = keccak256("GAME_ROLE");
+
+
     // Castles contract
-    address public castlesAddress = 0x71f5C328241fC3e03A8c79eDCD510037802D369c;
+    address public castlesAddress = 0xf22E6c12372b1bE8ba63EfFacAf1C8688e4A222A;
     IConnector public castlesContract = IConnector(castlesAddress);
 
     struct general {
@@ -70,12 +77,20 @@ contract MyContract is
     );
 
     event ExperienceSpent(uint256 generalId, uint256 xpSpent, uint256 xpRemaining);
+    event ExperienceGained(uint256 generalId, uint256 xpGained, uint256 xpRemaining);
     event NameChanged(uint256 generalId, string name);
     event Quest(uint256 generalId, uint256 xpGained, uint256 xpTotal);
     event AssignedCastle(uint256 generalId, uint256 castleId);
 
-    constructor() ERC721("CryptoGenerals", "CRYPTOGENERALS") Ownable() {}
+    constructor() ERC721("CryptoGenerals", "CRYPTOGENERALS") Ownable() {
+        // Grant the contract deployer the default admin role: it will be able
+        // to grant and revoke any roles
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
 
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721Enumerable, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
     // Change constants
 
     // Pause or resume minting
@@ -203,12 +218,19 @@ contract MyContract is
 
     // General modifiers
     function spendExperience(uint256 _tokenId, uint256 _experience) public {
-        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(_isApprovedOrOwner(msg.sender, _tokenId) || hasRole(GAME_ROLE, msg.sender), "Does not have permission");
         require(_experience <= experience[_tokenId], "Not enough experience");
 
         experience[_tokenId] -= _experience;
 
         emit ExperienceSpent(_tokenId, _experience, experience[_tokenId]);
+    }
+
+    function addExperience(uint256 _tokenId, uint256 _experience) public onlyOwner {
+        require(hasRole(GAME_ROLE, msg.sender), "Does not have Game role");
+
+        experience[_tokenId] += _experience;
+        emit ExperienceGained(_tokenId, _experience, experience[_tokenId]);
     }
 
     function quest(uint _tokenId) external {
@@ -220,10 +242,11 @@ contract MyContract is
         generalsQuestLog[_tokenId] = block.timestamp + DAY;
         experience[_tokenId] += xpGained;
         emit Quest(_tokenId, xpGained, experience[_tokenId]);
+        emit ExperienceGained(_tokenId, xpGained, experience[_tokenId]);
     }
 
      function levelUp(uint _tokenId) external {
-        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(_isApprovedOrOwner(msg.sender, _tokenId) || hasRole(GAME_ROLE, msg.sender), "Does not have permission");
         uint _level = generals[_tokenId].level;
         require(_level <= maxLevelGenerals, "Max level reached");
         uint _xpRequired = experienceRequired(_level, 100);

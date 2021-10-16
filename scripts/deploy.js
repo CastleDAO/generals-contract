@@ -13,7 +13,7 @@ async function main() {
   // manually to make sure everything is compiled
   // await hre.run('compile');
 
-  const Contract = await hre.ethers.getContractFactory("MyContract");
+  const Contract = await hre.ethers.getContractFactory("CryptoGenerals");
   const contract = await Contract.deploy();
 
   await contract.deployed();

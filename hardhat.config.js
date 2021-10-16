@@ -47,6 +47,10 @@ module.exports = {
       url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
       accounts: [process.env.WALLET_PRIVATE_KEY]
     },
+    arbitrumRinkeby: {
+      url: `https://arb-rinkeby.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+      accounts: [process.env.WALLET_PRIVATE_KEY]
+    },
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
       accounts: [process.env.WALLET_PRIVATE_KEY]
