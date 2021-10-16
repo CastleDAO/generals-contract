@@ -50,7 +50,7 @@ contract CryptoGenerals is
     uint256 public price = 50000000000000000; //0.05 ETH
     uint256 public castleOwnerPrice = 0; // 0 ETH
     bool public paused = false; // Enable disable
-    uint256 public maxTokens = 10000;
+    uint256 public maxTokens = 12999;
     uint256 public xpPerQuest = 100;
     uint256 public xpPerNameChange = 250;
     uint256 public maxLevelGenerals = 10;

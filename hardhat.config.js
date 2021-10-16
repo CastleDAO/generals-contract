@@ -54,6 +54,10 @@ module.exports = {
     mainnet: {
       url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
       accounts: [process.env.WALLET_PRIVATE_KEY]
+    },
+    arbitrummainnet: {
+      url: 'https://arb1.arbitrum.io/rpc',
+      accounts: [process.env.WALLET_PRIVATE_KEY]
     }
   },
   gasReporter: {
