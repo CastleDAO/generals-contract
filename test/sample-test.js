@@ -178,4 +178,29 @@ describe("CryptoGenerals", function () {
 
   });
 
+  it('Can change bio', async function () {
+
+    const exp = await myContract.experience(1);
+
+    const price = await myContract.changeNamePrice();
+
+    const result = await myContract.changeBio(1, 'Mariano', {
+      value: price
+    });
+    expect(result).to.emit(myContract, "BioChanged");
+    const receipt = await result.wait();
+
+    const nameChangeEvent = receipt.events.find( i => i.event === 'BioChanged');
+
+    expect(nameChangeEvent.args[0]).to.equal(1);
+    expect(nameChangeEvent.args[1]).to.equal('Mariano');
+
+    const expNew = await myContract.experience(1);
+    const bio = await myContract.bios(1);
+
+    expect(bio).to.be.eq('Mariano');
+    expect(expNew.toNumber()).to.be.eq(exp.toNumber() + 250);
+
+  });
+
 });

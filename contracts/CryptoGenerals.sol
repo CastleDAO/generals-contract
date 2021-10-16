@@ -27,7 +27,7 @@ contract CryptoGenerals is
 
 
     // Castles contract
-    address public castlesAddress = 0xf22E6c12372b1bE8ba63EfFacAf1C8688e4A222A;
+    address public castlesAddress = 0x71f5C328241fC3e03A8c79eDCD510037802D369c;
     IConnector public castlesContract = IConnector(castlesAddress);
 
     struct general {
@@ -58,6 +58,7 @@ contract CryptoGenerals is
 
     // Mappings
     mapping(uint256 => general) public generals;
+    mapping(uint256 => string) public bios;
     mapping(uint256 => uint256) public experience;
     mapping(uint256 => uint256) public castle;
     mapping(uint => uint) public generalsQuestLog;
@@ -79,6 +80,8 @@ contract CryptoGenerals is
     event ExperienceSpent(uint256 generalId, uint256 xpSpent, uint256 xpRemaining);
     event ExperienceGained(uint256 generalId, uint256 xpGained, uint256 xpRemaining);
     event NameChanged(uint256 generalId, string name);
+    event BioChanged(uint256 generalId, string bio);
+
     event Quest(uint256 generalId, uint256 xpGained, uint256 xpTotal);
     event AssignedCastle(uint256 generalId, uint256 castleId);
 
@@ -96,6 +99,10 @@ contract CryptoGenerals is
     // Pause or resume minting
     function flipPause() public onlyOwner {
         paused = !paused;
+    }
+
+    function setCastleContractAddress(address _castle) public onlyOwner {
+        castlesAddress = _castle;
     }
 
     function setMaxLevels(uint256 _newMaxLevels) public onlyOwner {
@@ -287,11 +294,24 @@ contract CryptoGenerals is
     {
         require(msg.value >= changeNamePrice, "Eth sent is not enough");
         require(_isApprovedOrOwner(msg.sender, _tokenId));
-        require(bytes(_name).length < 100 && bytes(_name).length > 3, "Name between 3 and 100 characters");
+        require(bytes(_name).length < 100 && bytes(_name).length > 3, "Name between 4 and 100 characters");
         generals[_tokenId].name = _name;
         // Increase experience
         experience[_tokenId] += xpPerNameChange;
         emit NameChanged(_tokenId, _name);
+    }
+
+    function changeBio(uint256 _tokenId, string memory _bio)
+        external
+        payable
+        nonReentrant
+    {
+        require(msg.value >= changeNamePrice, "Eth sent is not enough");
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+        require(bytes(_bio).length < 300 && bytes(_bio).length > 3, "Bio between 4 and 300 characters");
+        bios[_tokenId] = _bio;
+        experience[_tokenId] += xpPerNameChange;
+        emit BioChanged(_tokenId, _bio);
     }
 
     function changeCastle(uint256 _tokenId, uint256 _castleId)
