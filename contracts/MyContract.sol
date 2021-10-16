@@ -52,6 +52,7 @@ contract MyContract is
     // Mappings
     mapping(uint256 => general) public generals;
     mapping(uint256 => uint256) public experience;
+    mapping(uint256 => uint256) public castle;
     mapping(uint => uint) public generalsQuestLog;
     mapping(uint256 => bool) public claimedWithCastle;
 
@@ -71,6 +72,7 @@ contract MyContract is
     event ExperienceSpent(uint256 generalId, uint256 xpSpent, uint256 xpRemaining);
     event NameChanged(uint256 generalId, string name);
     event Quest(uint256 generalId, uint256 xpGained, uint256 xpTotal);
+    event AssignedCastle(uint256 generalId, uint256 castleId);
 
     constructor() ERC721("CryptoGenerals", "CRYPTOGENERALS") Ownable() {}
 
@@ -142,10 +144,12 @@ contract MyContract is
         require(msg.value >= castleOwnerPrice, "Eth sent is not enough");
         require(!claimedWithCastle[_castleId], "Castle already used for claiming a general");
 
-        _internalMint(_name);
+        uint256 tokenId = _internalMint(_name);
 
         // Update the list of claimed
         claimedWithCastle[_castleId] = true;
+        castle[tokenId] = _castleId;
+        emit AssignedCastle(tokenId, _castleId);
     }
 
     // Allow the owner to claim a nft
@@ -154,7 +158,7 @@ contract MyContract is
     }
 
     // Called by every function after safe access checks
-    function _internalMint(string memory _name) internal {
+    function _internalMint(string memory _name) internal returns (uint256) {
         require(bytes(_name).length < 100 && bytes(_name).length > 3, "Name between 3 and 100 characters");
 
         // minting logic
@@ -166,6 +170,7 @@ contract MyContract is
 
         _createGeneral(tokenId, _name);
         _safeMint(_msgSender(), tokenId);
+        return tokenId;
     }
 
     // Create general
@@ -264,6 +269,21 @@ contract MyContract is
         // Increase experience
         experience[_tokenId] += xpPerNameChange;
         emit NameChanged(_tokenId, _name);
+    }
+
+    function changeCastle(uint256 _tokenId, uint256 _castleId)
+        external
+        nonReentrant
+    {
+        require(
+            castlesContract.ownerOf(_castleId) == msg.sender,
+            "Not the owner of this castle"
+        );
+        require(_isApprovedOrOwner(msg.sender, _tokenId));
+
+
+        castle[_tokenId] = _castleId;
+        emit AssignedCastle(_tokenId, _castleId);
     }
 
     function _random(uint256 _salt, uint256 _limit)
