@@ -1,4 +1,7 @@
-# NFT
+# Generals contracts
+
+- CryptoGenerals: Generals NFT contract
+- GeneralWeapons: NFT that can be minted by the system and rewarded to the users, it can be equiped into a general
 
 
 ## Setup
